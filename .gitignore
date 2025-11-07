@@ -49,3 +49,46 @@ mlruns/*
 
 # Local assistant config
 .claude/
+
+# Environment files
+.env
+.env.local
+*.env
+
+# Conda environments
+conda-meta/
+envs/
+
+# Data files (too large for git)
+data/redsm5/
+!data/redsm5/.gitkeep
+
+# Model checkpoints (too large for git)
+*.pt
+*.pth
+*.bin
+*.safetensors
+checkpoints/
+
+# Logs
+logs/
+*.log
+
+# MLflow
+mlflow.db
+optuna.db
+
+# Spec-kit artifacts (keep specs, ignore generated artifacts)
+.specify/artifacts/
+!.specify/artifacts/.gitkeep
+
+# Cache
+.cache/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# TensorBoard
+runs/
+events.out.tfevents.*

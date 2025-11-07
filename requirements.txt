@@ -1,0 +1,50 @@
+# Core ML/LLM Libraries
+transformers>=4.40.0
+datasets>=2.18.0
+tokenizers>=0.19.0
+accelerate>=0.28.0
+sentencepiece>=0.2.0
+protobuf>=4.25.0
+
+# MLflow and Experiment Tracking
+mlflow>=2.12.0
+optuna>=3.6.0
+
+# Database
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.0
+
+# Evaluation and Metrics
+evaluate>=0.4.1
+scikit-learn>=1.4.0
+rouge-score>=0.1.2
+
+# Data Processing
+pandas>=2.2.0
+numpy>=1.26.0
+pyarrow>=15.0.0
+
+# Utilities
+tqdm>=4.66.0
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+
+# Logging and Monitoring
+tensorboard>=2.16.0
+wandb>=0.16.0
+
+# Development Dependencies
+pytest>=8.1.0
+pytest-cov>=4.1.0
+black>=24.3.0
+ruff>=0.3.0
+mypy>=1.9.0
+pre-commit>=3.7.0
+
+# Performance Optimization for RTX 4090
+bitsandbytes>=0.43.0
+flash-attn>=2.5.0
+triton>=2.2.0
+
+# HuggingFace Hub
+huggingface-hub>=0.22.0

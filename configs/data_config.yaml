@@ -1,0 +1,139 @@
+# Data Processing Configuration
+
+dataset:
+  # Source
+  name: "irlab-udc/redsm5"
+  local_path: "data/redsm5"
+  cache_dir: ".cache/datasets"
+
+  # Filtering
+  filter_special_cases: true  # Exclude "special case" symptom category
+  symptom_categories:
+    include: 9  # Only 9 DSM-5 symptoms
+    exclude: ["special case"]  # Exclude this category
+
+  # Splits
+  splits:
+    train: "train"
+    validation: "validation"
+    test: "test"
+
+  # Schema
+  fields:
+    post: "post"  # Text of the post
+    criterion: "criterion"  # Diagnostic criterion
+    evidence_sentence: "evidence_sentence"  # Ground truth evidence sentence
+    symptom_category: "symptom_category"  # For filtering
+
+evidence_extraction:
+  # Evidence sentence position extraction
+  method: "string_matching"  # How to locate evidence in post
+
+  # Matching strategy
+  matching:
+    exact_match: false  # Allow fuzzy matching
+    normalize_whitespace: true
+    remove_punctuation: false
+    case_sensitive: false
+
+  # Fuzzy matching parameters (if exact match fails)
+  fuzzy:
+    enabled: true
+    threshold: 0.85  # Minimum similarity score
+    algorithm: "difflib"  # or "fuzzywuzzy", "rapidfuzz"
+
+  # Fallback behavior when evidence not found
+  not_found_action: "skip"  # Options: "skip", "use_full_post", "flag"
+
+tokenization:
+  # Tokenizer settings
+  model_name: "google/gemma-7b"  # Use same tokenizer as model
+
+  # Special tokens for prompt structure
+  add_special_tokens: true
+  custom_tokens:
+    - "[INST]"
+    - "[/INST]"
+    - "[POST]"
+    - "[/POST]"
+    - "[CRITERION]"
+    - "[/CRITERION]"
+
+  # Sequence handling
+  max_seq_length: 1024  # Maximum total sequence length
+  doc_stride: 128  # For sliding window (if needed)
+  max_query_length: 128  # Max length for criterion
+
+  # Truncation strategy
+  truncation:
+    enabled: true
+    strategy: "preserve_evidence"  # Options: "preserve_evidence", "only_post", "sliding_window"
+    post_only: true  # Truncate post, keep full criterion
+
+  # Position mapping
+  return_offsets_mapping: true  # For char-to-token mapping
+  return_attention_mask: true
+  return_token_type_ids: false  # Not used for Gemma
+
+preprocessing:
+  # Text normalization (before tokenization)
+  normalize:
+    lowercase: false  # Keep original case for evidence matching
+    remove_extra_whitespace: true
+    remove_special_chars: false
+
+  # Evidence position calculation
+  positions:
+    format: "token_indices"  # Options: "token_indices", "char_indices"
+    zero_indexed: true
+    inclusive_end: false  # End index is exclusive
+
+  # Validation
+  validate:
+    check_evidence_in_post: true
+    check_position_validity: true
+    max_evidence_length: 512  # tokens
+    min_evidence_length: 5  # tokens
+
+data_loading:
+  # DataLoader settings
+  batch_size: 8  # Default, can be overridden by training config
+  num_workers: 4
+  pin_memory: true
+  shuffle_train: true
+  shuffle_val: false
+  drop_last: false
+
+  # Caching
+  cache_preprocessed: true
+  cache_dir: ".cache/preprocessed"
+
+  # Prefetching
+  prefetch_factor: 2
+
+quality_checks:
+  # Data quality validation
+  min_post_length: 10  # characters
+  max_post_length: 10000  # characters
+  min_criterion_length: 5  # characters
+  max_criterion_length: 200  # characters
+
+  # Evidence validation
+  evidence_in_post: true  # Must be exact substring or fuzzy match
+  log_mismatches: true
+  save_problematic_samples: true
+  problematic_samples_path: "data/problematic_samples.json"
+
+statistics:
+  # Compute dataset statistics
+  compute_stats: true
+  stats_output: "data/dataset_statistics.json"
+
+  # Metrics to compute
+  metrics:
+    - "num_samples_per_split"
+    - "avg_post_length"
+    - "avg_criterion_length"
+    - "avg_evidence_length"
+    - "symptom_category_distribution"
+    - "position_distribution"

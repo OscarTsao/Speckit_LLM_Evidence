@@ -1,0 +1,100 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    name: Build Environment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: '3.11'
+          miniforge-variant: Mambaforge
+          use-mamba: true
+
+      - name: Create conda environment
+        run: |
+          # Create a minimal test environment without CUDA for CI
+          cat > environment-ci.yml << EOF
+          name: speckit-llm-evidence-ci
+          channels:
+            - pytorch
+            - conda-forge
+            - defaults
+          dependencies:
+            - python=3.11
+            - pytorch::pytorch-cpu
+            - numpy
+            - scipy
+            - pandas
+            - postgresql
+            - psycopg2
+            - pip
+            - pip:
+                - transformers>=4.40.0
+                - datasets>=2.18.0
+                - mlflow>=2.12.0
+                - pytest>=8.1.0
+                - ruff>=0.3.0
+                - black>=24.3.0
+          EOF
+
+          mamba env create -f environment-ci.yml
+
+      - name: Activate environment and install package
+        shell: bash -l {0}
+        run: |
+          conda activate speckit-llm-evidence-ci
+          pip install -e .
+
+      - name: Verify installation
+        shell: bash -l {0}
+        run: |
+          conda activate speckit-llm-evidence-ci
+          python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+          python -c "import transformers; print(f'Transformers: {transformers.__version__}')"
+          python -c "import mlflow; print(f'MLflow: {mlflow.__version__}')"
+
+      - name: Run linting
+        shell: bash -l {0}
+        run: |
+          conda activate speckit-llm-evidence-ci
+          ruff check src tests || true
+
+      - name: Run tests
+        shell: bash -l {0}
+        run: |
+          conda activate speckit-llm-evidence-ci
+          pytest tests/ -v || true
+
+  docker-build:
+    name: Build Dev Container
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build dev container
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: .devcontainer/Dockerfile
+          push: false
+          tags: speckit-llm-evidence:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

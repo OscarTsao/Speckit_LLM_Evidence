@@ -1,0 +1,75 @@
+# MLflow Configuration
+
+tracking:
+  # Backend selection (sqlite for dev, postgresql for prod)
+  backend_type: "sqlite"  # Options: "sqlite", "postgresql"
+
+  # SQLite backend (default for development)
+  sqlite:
+    backend_store_uri: "sqlite:///mlflow.db"
+    enabled: true
+
+  # PostgreSQL backend (for production)
+  postgresql:
+    backend_store_uri: "postgresql://mlflow_user:mlflow_password@localhost:5432/mlflow_db"
+    enabled: false
+
+  # Use environment variable to override
+  # Set MLFLOW_BACKEND_STORE_URI to override default
+
+  # Local artifact store
+  artifact_location: "file:./mlruns"
+
+  # Default experiment name
+  experiment_name: "criteria-matching-extractive-qa"
+
+autologging:
+  # Enable MLflow autologging for supported frameworks
+  pytorch: true
+  transformers: true
+  log_models: true
+  log_datasets: true
+  silent: false
+
+registry:
+  # Model registry configuration
+  model_name: "gemma-criteria-matching"
+
+  # Promotion thresholds
+  staging_threshold:
+    f1_score: 0.50
+    exact_match: 0.40
+
+  production_threshold:
+    f1_score: 0.60
+    exact_match: 0.45
+
+logging:
+  # What to log automatically
+  log_params: true
+  log_metrics: true
+  log_artifacts: true
+  log_model_signature: true
+
+  # Metric logging frequency
+  log_every_n_steps: 100
+
+  # Checkpoint saving
+  save_checkpoints: true
+  checkpoint_frequency: 500  # steps
+
+tags:
+  # Default tags for all runs
+  project: "speckit-llm-evidence"
+  task: "extractive-qa"
+  gpu: "rtx-4090"
+  framework: "pytorch"
+
+artifacts:
+  # Artifacts to log
+  - config_files
+  - model_checkpoints
+  - evaluation_results
+  - training_logs
+  - predictions
+  - tokenizer

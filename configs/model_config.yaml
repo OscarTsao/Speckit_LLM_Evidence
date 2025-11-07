@@ -1,0 +1,185 @@
+# Model Architecture Configuration
+
+model:
+  # Base model selection
+  base:
+    name: "google/gemma-7b"  # Default model
+    alternatives:
+      small: "google/gemma-2b"
+      large: "google/gemma-7b"
+
+  # Model loading
+  loading:
+    pretrained: true
+    trust_remote_code: true
+    torch_dtype: "float16"  # or "bfloat16"
+    device_map: "auto"  # Automatic device placement
+    low_cpu_mem_usage: true
+
+encoder_conversion:
+  # Decoder-to-Encoder adaptation following arxiv:2503.02656
+  enabled: true
+
+  # Attention modification
+  attention:
+    convert_to_bidirectional: true
+    method: "mask_removal"  # Options: "mask_removal", "attention_override"
+
+  # Implementation details
+  causal_mask:
+    remove: true
+    replace_with: "full_attention"  # Full attention matrix
+
+  # Layer modifications
+  layers:
+    modify_all: true
+    specific_layers: null  # Or list of layer indices
+
+  # Attention mechanism override
+  attention_override:
+    is_causal: false  # Set to False for bidirectional
+    sliding_window: null  # Not used for full attention
+
+qa_heads:
+  # Question answering output heads
+  architecture: "squad_style"
+
+  # Head configuration
+  start_head:
+    type: "linear"
+    input_dim: null  # Auto-detect from model hidden size
+    output_dim: 1
+    activation: null  # No activation, use raw logits
+
+  end_head:
+    type: "linear"
+    input_dim: null  # Auto-detect from model hidden size
+    output_dim: 1
+    activation: null
+
+  # Combined head (alternative to separate start/end)
+  combined_head:
+    enabled: false  # Use separate heads by default
+    output_dim: 2  # [start_logits, end_logits]
+
+  # Head initialization
+  initialization:
+    method: "xavier_uniform"
+    seed: 42
+
+pooling:
+  # How to pool sequence outputs for classification
+  type: "none"  # No pooling for QA (use per-token logits)
+
+position_embeddings:
+  # Position embedding strategy
+  modify: false  # Keep pretrained position embeddings
+  max_position_embeddings: 8192  # Gemma default
+
+  # Optional: Retrain position embeddings
+  retrain:
+    enabled: false
+    freeze_other_weights: true
+    epochs: 1
+
+tokenizer:
+  # Tokenizer configuration
+  name: null  # Auto-load from model
+
+  # Special tokens
+  add_custom_tokens: true
+  custom_tokens:
+    additional_special_tokens:
+      - "[INST]"
+      - "[/INST]"
+      - "[POST]"
+      - "[/POST]"
+      - "[CRITERION]"
+      - "[/CRITERION]"
+
+  # Tokenizer settings
+  padding_side: "right"
+  truncation_side: "right"
+  model_max_length: 1024
+
+prompt_template:
+  # Input formatting
+  version: "v1"
+
+  # Template structure
+  template: |
+    [INST] Extract the evidence sentence that supports the diagnostic criterion. [/INST]
+    [POST] {post} [/POST]
+    [CRITERION] {criterion} [/CRITERION]
+
+  # Alternative templates
+  alternatives:
+    simple: "Question: Find evidence for criterion.\nPost: {post}\nCriterion: {criterion}"
+    natural: "Given the post: {post}\nFind evidence for: {criterion}"
+
+  # Placeholder validation
+  required_placeholders:
+    - "post"
+    - "criterion"
+
+optimization:
+  # Model optimization settings
+  gradient_checkpointing: false  # Enable if OOM
+
+  # Quantization (for inference)
+  quantization:
+    enabled: false
+    method: "bitsandbytes"  # or "GPTQ", "AWQ"
+    load_in_8bit: false
+    load_in_4bit: false
+
+  # Flash Attention
+  flash_attention:
+    enabled: true
+    fallback_to_standard: true
+
+  # Memory optimization
+  memory:
+    max_memory: null  # Auto-detect
+    offload_folder: "offload"
+
+model_output:
+  # What the model returns
+  return_dict: true
+  output_hidden_states: false
+  output_attentions: false
+
+  # QA-specific outputs
+  qa_outputs:
+    start_logits: true
+    end_logits: true
+    sequence_output: false  # Hidden states
+
+loss:
+  # Loss function configuration
+  start_loss_type: "cross_entropy"
+  end_loss_type: "cross_entropy"
+
+  # Loss weighting
+  start_weight: 1.0
+  end_weight: 1.0
+
+  # Ignore index for padding
+  ignore_index: -100
+
+  # Label smoothing
+  label_smoothing: 0.0
+
+architecture_notes: |
+  Implementation of Gemma Encoder following arxiv:2503.02656:
+
+  1. Load pretrained Gemma decoder
+  2. Modify attention layers to remove causal masking
+  3. Add task-specific QA heads (start/end position classifiers)
+  4. Keep all pretrained weights (transfer learning)
+  5. Fine-tune entire model on extractive QA task
+
+  Key differences from standard Gemma:
+  - Bidirectional attention (not causal)
+  - QA heads instead of language modeling head
+  - Single evidence span prediction
