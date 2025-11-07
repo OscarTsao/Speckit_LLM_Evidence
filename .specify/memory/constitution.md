@@ -24,22 +24,29 @@ Build a fine-tuned extractive question-answering system for criteria matching ta
 ### 3. Data Integrity
 - Source dataset: `irlab-udc/redsm5` from HuggingFace
 - Local copy in `data/redsm5/` directory
+- Filter out "special case" symptom category samples
+- Evidence groundtruth: Locate evidence sentence positions in post programmatically
+- Post truncation: Truncate posts if exceeding max_seq_length while preserving evidence
 - No data leakage between train/val/test splits
-- Proper preprocessing and tokenization pipelines
+- Single evidence span per example (one evidence sentence per post-criterion pair)
 - Validate data quality before training
 
 ### 4. Model Architecture
-- Base approach: Gemma Encoder (decoder-to-encoder adaptation)
-- Task: Extractive QA with SQuAD-style start/end token classification
-- Input format: `"Retrieve the evidence from the post:{post} that support the diagnosis of the criterion:{criterion}"`
-- Output: Start and end position logits for evidence span extraction
-- Handle special cases appropriately
+- Base model: Standard Gemma from HuggingFace (`google/gemma-7b` default, `google/gemma-2b` alternative)
+- Architecture approach: True encoder conversion (replace causal attention with bidirectional)
+- Task: Extractive QA with SQuAD-style start/end token classification for single evidence span
+- Input format: Optimized prompt with special tokens following paper methodology
+- Output: Start and end position logits for evidence sentence extraction
+- Evidence handling: Single evidence sentence per post-criterion pair
+- Special case filtering: Exclude "special case" symptom category (use only 9 DSM-5 symptoms)
 
 ### 5. Evaluation Standards
-- Primary metrics: Exact Match (EM) and F1 Score
-- Secondary metrics: Precision, Recall at various thresholds
+- Primary metrics: Exact Match (EM) and F1 Score (SQuAD-style evaluation)
+- All-level metrics: Character-level, token-level, and word-level matching
+- Evaluation approach: Follow SQuAD evaluation exactly (normalization, punctuation handling)
 - Validation strategy: Hold-out validation set
 - Test only on final model selection
+- Performance thresholds: Adjust after initial dataset analysis
 - Log all metrics to MLflow
 
 ### 6. Code Quality
@@ -65,7 +72,9 @@ Build a fine-tuned extractive question-answering system for criteria matching ta
 - Separate requirements for dev/prod
 
 ### 9. Experimentation Workflow
-- Use Optuna for hyperparameter optimization
+- Baseline training first, then Optuna hyperparameter optimization
+- Initial development: SQLite backend for MLflow (faster iteration)
+- Production runs: PostgreSQL backend for MLflow (scalability)
 - Track all hyperparameter sweeps in MLflow
 - Document experiment rationale in MLflow run descriptions
 - Compare runs systematically before model selection
@@ -80,13 +89,17 @@ Build a fine-tuned extractive question-answering system for criteria matching ta
 
 ## Non-Negotiables
 
-1. **GPU Requirement**: Must run on CUDA-enabled hardware
-2. **MLflow Tracking**: Every training run must be logged
+1. **GPU Requirement**: Must run on CUDA-enabled hardware (RTX 4090 optimized)
+2. **MLflow Tracking**: Every training run must be logged (SQLite dev, PostgreSQL prod)
 3. **Data Location**: Dataset must be in `data/redsm5/`
-4. **Format Consistency**: Input must follow specified template
-5. **Metric Reporting**: EM and F1 must be reported for all evaluations
-6. **Version Control**: All code changes must be committed with clear messages
-7. **No Manual Steps**: Build process must be fully automated
+4. **Data Filtering**: Must exclude "special case" symptom category
+5. **Format Consistency**: Input must follow optimized prompt with special tokens
+6. **Metric Reporting**: All metrics (EM, F1, character/token/word-level) for all evaluations
+7. **Evidence Processing**: Programmatic evidence sentence position extraction
+8. **Model Flexibility**: Support both Gemma-2b and Gemma-7b via Makefile
+9. **SQuAD Compliance**: Evaluation must follow SQuAD methodology exactly
+10. **Version Control**: All code changes must be committed with clear messages
+11. **No Manual Steps**: Build process must be fully automated
 
 ## Decision Framework
 

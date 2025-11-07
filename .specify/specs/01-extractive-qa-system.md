@@ -11,12 +11,18 @@ Build an extractive question-answering system that identifies evidence spans in 
 #### 1.1 Dataset Handling
 - **Source**: HuggingFace dataset `irlab-udc/redsm5`
 - **Local Storage**: `data/redsm5/` directory
-- **Format**: JSON/CSV with fields: `post`, `criterion`, `evidence_start`, `evidence_end`
+- **Dataset Schema**: Contains `post` and `evidence_sentence` fields
+- **Filtering**: Exclude samples with "special case" symptom category (keep only 9 DSM-5 symptoms)
+- **Evidence Position Extraction**:
+  - Dataset provides evidence sentence text (not positions)
+  - Programmatically locate evidence sentence in post using string matching
+  - Handle edge cases (sentence may not be exact substring due to whitespace/formatting)
+  - Convert evidence sentence positions to token indices after tokenization
 - **Preprocessing**:
   - Tokenization with Gemma tokenizer
-  - Character-to-token position mapping
-  - Truncation strategy for long sequences
-  - Special case handling (when no evidence exists)
+  - Character-to-token position mapping for evidence spans
+  - Truncation strategy: Truncate post if exceeding max_seq_length, preserve evidence sentence
+  - Single evidence span per example (one evidence sentence per post-criterion pair)
 
 #### 1.2 Data Loading
 - Implement `RedsM5Dataset` class in `src/Project/SubProject/data/dataset.py`
@@ -27,18 +33,70 @@ Build an extractive question-answering system that identifies evidence spans in 
 ### 2. Model Architecture
 
 #### 2.1 Base Model
-- **Architecture**: Gemma-based encoder (decoder-to-encoder adaptation)
-- **Pretrained Checkpoint**: `google/gemma-2b` or `google/gemma-7b`
-- **Modification**: Replace causal attention with bidirectional attention
-- **Output Heads**:
-  - Start position classifier (linear layer)
-  - End position classifier (linear layer)
+- **Source**: Standard Gemma from HuggingFace
+- **Default**: `google/gemma-7b` (better performance, ~7B parameters)
+- **Alternative**: `google/gemma-2b` (faster training, ~2B parameters)
+- **Model Selection**: Configurable via Makefile commands
+
+#### 2.1.1 Encoder Conversion (Critical Implementation)
+Following paper methodology for decoder-to-encoder adaptation:
+- **Load pretrained Gemma decoder** from HuggingFace
+- **Replace causal attention mask** with bidirectional attention:
+  - Remove causal masking in self-attention layers
+  - Enable full attention across all positions (not just previous tokens)
+  - Modify attention mask from lower-triangular to full matrix
+- **Keep pretrained weights** (transfer learning from decoder)
+- **Add task-specific heads**:
+  - Start position classifier: Linear layer `[hidden_size] → [1]`
+  - End position classifier: Linear layer `[hidden_size] → [1]`
+  - Both heads produce logits over sequence length
+
+#### 2.1.2 Implementation Approach
+```python
+# Pseudocode for encoder conversion
+model = AutoModelForCausalLM.from_pretrained("google/gemma-7b")
+
+# Modify attention mechanism
+for layer in model.model.layers:
+    # Replace causal attention with bidirectional
+    layer.self_attn.is_causal = False
+
+# Add QA heads
+model.qa_outputs = nn.Linear(hidden_size, 2)  # start and end logits
+```
 
 #### 2.2 Input Format
+
+**Prompt Optimization** (based on paper methodology):
+
+Following arxiv:2503.02656 approach for encoder tasks:
+- Use special tokens to delineate sections
+- Optimize for evidence extraction task
+- Format: `[INST] {instruction} [/INST] [POST] {post} [/POST] [CRITERION] {criterion} [/CRITERION]`
+
+**Recommended Format**:
 ```
-Template: "Retrieve the evidence from the post:{post} that support the diagnosis of the criterion:{criterion}"
-Example: "Retrieve the evidence from the post:Patient shows severe anxiety and recurring nightmares that support the diagnosis of the criterion:PTSD symptoms"
+[INST] Extract the evidence sentence that supports the diagnostic criterion. [/INST] [POST] {post_text} [/POST] [CRITERION] {criterion_text} [/CRITERION]
 ```
+
+**Example**:
+```
+[INST] Extract the evidence sentence that supports the diagnostic criterion. [/INST]
+[POST] Patient reports persistent feelings of sadness. They have trouble sleeping most nights. They lost interest in activities they once enjoyed. [/POST]
+[CRITERION] Depressed mood most of the day [/CRITERION]
+```
+
+**Alternative Simpler Format** (if special tokens cause issues):
+```
+Question: Find evidence for criterion.
+Post: {post_text}
+Criterion: {criterion_text}
+```
+
+**Token Handling**:
+- Add custom tokens `[INST]`, `[/INST]`, `[POST]`, `[/POST]`, `[CRITERION]`, `[/CRITERION]` to tokenizer
+- Or use existing Gemma special tokens if available
+- Evidence span should be extracted from the `[POST]` section only
 
 #### 2.3 Output Format
 - **Start Logits**: [batch_size, seq_length] tensor of start position scores
@@ -78,10 +136,33 @@ Example: "Retrieve the evidence from the post:Patient shows severe anxiety and r
 ### 4. Evaluation Pipeline
 
 #### 4.1 Metrics
-- **Exact Match (EM)**: Percentage of predictions with exact character match
-- **F1 Score**: Token-level overlap F1
-- **Precision/Recall**: At character and token level
-- **Latency**: Inference time per sample
+
+Following SQuAD evaluation methodology exactly:
+
+**Primary Metrics**:
+- **Exact Match (EM)**: Percentage of predictions matching gold answer exactly (after normalization)
+- **F1 Score**: Token-level overlap F1 between prediction and gold answer
+
+**Normalization** (SQuAD-style):
+- Lowercase text
+- Remove punctuation
+- Remove articles (a, an, the)
+- Normalize whitespace
+
+**Multi-level Metrics** (comprehensive evaluation):
+1. **Character-level**: Exact substring match in original text
+2. **Token-level**: F1 score on tokenized spans (primary metric)
+3. **Word-level**: F1 score on word-level spans
+
+**Additional Metrics**:
+- **Precision**: Ratio of correct tokens in prediction
+- **Recall**: Ratio of correct tokens found
+- **Partial Match**: Count predictions with >50% overlap
+- **No-Answer Accuracy**: If implementing no-answer prediction
+- **Latency**: Inference time per sample (ms)
+
+**Evaluation Code**:
+Use official SQuAD evaluation script or HuggingFace `evaluate` library with `squad` metric
 
 #### 4.2 Evaluation Script
 - Implement in `src/Project/SubProject/engine/eval_engine.py`
@@ -92,11 +173,25 @@ Example: "Retrieve the evidence from the post:Patient shows severe anxiety and r
 ### 5. MLflow Integration
 
 #### 5.1 Tracking Configuration
-- **Backend**: PostgreSQL database
-  - Database: `mlflow_db`
-  - Connection string: `postgresql://user:password@localhost:5432/mlflow_db`
+
+**Development Setup** (SQLite - simpler, faster iteration):
+- **Backend**: SQLite database
+  - Database file: `mlflow.db` in project root
+  - Connection string: `sqlite:///mlflow.db`
 - **Artifact Store**: Local directory `mlruns/`
 - **Experiment Name**: `criteria-matching-extractive-qa`
+
+**Production Setup** (PostgreSQL - for scale and team collaboration):
+- **Backend**: PostgreSQL database
+  - Database: `mlflow_db`
+  - Connection string: `postgresql://mlflow_user:password@localhost:5432/mlflow_db`
+- **Artifact Store**: Local directory `mlruns/` or S3/cloud storage
+- **Experiment Name**: `criteria-matching-extractive-qa-production`
+
+**Switching Backends**:
+- Use environment variable `MLFLOW_BACKEND` to switch
+- Default to SQLite for development
+- Scripts should support both backends
 
 #### 5.2 Logged Artifacts
 - **Parameters**: All hyperparameters (lr, batch_size, model_name, etc.)
@@ -206,13 +301,40 @@ bash scripts/setup_environment.sh
 - [ ] Gradio demo interface
 - [ ] Comprehensive documentation
 
+## Implementation Decisions (Resolved)
+
+✅ **Dataset Format**: REDSM5 provides post and evidence_sentence (not positions)
+✅ **Base Model**: Gemma-7b default, Gemma-2b alternative (both supported via Makefile)
+✅ **Special Cases**: Filter out "special case" symptom category (keep only 9 DSM-5 symptoms)
+✅ **Evidence Spans**: Single evidence sentence per example (no multi-span)
+✅ **Position Extraction**: Programmatic string matching to locate evidence in post
+✅ **Truncation**: Truncate post if exceeds max_seq_length, preserve evidence
+✅ **Encoder Conversion**: True bidirectional attention conversion from decoder
+✅ **Prompt Format**: Optimized with special tokens following paper methodology
+✅ **Evaluation**: SQuAD-style metrics at character, token, and word levels
+✅ **MLflow Backend**: SQLite for development, PostgreSQL for production
+✅ **Hyperparameter Tuning**: After baseline training with Optuna
+
 ## Open Questions
 
-1. What is the exact format of the redsm5 dataset? Need to inspect after download.
-2. Should we use Gemma-2b or Gemma-7b? (7b likely better but slower)
-3. What constitutes a "special case" where no evidence exists?
-4. Do we need to handle multi-span evidence extraction?
-5. What's the maximum sequence length we should support?
+1. **Evidence Matching**: How to handle cases where evidence sentence has slight formatting differences from post?
+   - Use fuzzy matching with threshold?
+   - Normalize both before matching?
+
+2. **Maximum Sequence Length**: What's optimal for Gemma-7b on RTX 4090?
+   - 512 tokens (safe, fast)?
+   - 1024 tokens (more context, slower)?
+   - 2048 tokens (maximum context, potential OOM)?
+
+3. **No-Answer Handling**: What to do if evidence sentence not found in post during preprocessing?
+   - Skip example?
+   - Use entire post as evidence?
+   - Flag for manual review?
+
+4. **Attention Modification**: Best approach for encoder conversion?
+   - Modify attention mask only?
+   - Also modify positional embeddings?
+   - Retrain position embeddings?
 
 ## Dependencies
 
