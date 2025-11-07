@@ -1,0 +1,42 @@
+name: speckit-llm-evidence
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python environment
+  - python=3.11
+
+  # CUDA toolkit for RTX 4090 (CUDA 12.1 recommended)
+  - pytorch::pytorch=2.2.*
+  - pytorch::pytorch-cuda=12.1
+  - pytorch::torchvision
+  - pytorch::torchaudio
+  - nvidia::cuda-toolkit=12.1
+  - nvidia::cudnn=8.9
+
+  # System dependencies
+  - git
+  - git-lfs
+  - gcc_linux-64
+  - gxx_linux-64
+
+  # Database
+  - postgresql
+  - psycopg2
+
+  # Scientific computing
+  - numpy
+  - scipy
+  - pandas
+
+  # Development tools
+  - pip
+  - setuptools
+  - wheel
+
+  # Install pip dependencies from requirements.txt
+  - pip:
+      - -r requirements.txt

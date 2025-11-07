@@ -1,0 +1,75 @@
+name: Spec-Kit Validation
+
+on:
+  push:
+    branches: [ main, develop, "claude/**" ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate-specs:
+    name: Validate Spec-Kit Specifications
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install spec-kit CLI
+        run: |
+          uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+
+      - name: Validate constitution exists
+        run: |
+          if [ ! -f .specify/memory/constitution.md ]; then
+            echo "Error: Constitution file not found"
+            exit 1
+          fi
+          echo "Constitution file found ✓"
+
+      - name: Validate specifications exist
+        run: |
+          if [ ! -d .specify/specs ]; then
+            echo "Error: Specs directory not found"
+            exit 1
+          fi
+          spec_count=$(find .specify/specs -name "*.md" | wc -l)
+          if [ $spec_count -eq 0 ]; then
+            echo "Error: No specification files found"
+            exit 1
+          fi
+          echo "Found $spec_count specification files ✓"
+
+      - name: Check spec file formatting
+        run: |
+          for spec in .specify/specs/*.md; do
+            echo "Checking $spec..."
+            # Basic validation: file should have headers and content
+            if ! grep -q "^#" "$spec"; then
+              echo "Error: $spec has no headers"
+              exit 1
+            fi
+          done
+          echo "All spec files have proper formatting ✓"
+
+      - name: Validate constitution content
+        run: |
+          constitution=".specify/memory/constitution.md"
+          required_sections=("Mission" "Principles" "Decision Framework")
+
+          for section in "${required_sections[@]}"; do
+            if ! grep -qi "$section" "$constitution"; then
+              echo "Warning: Constitution missing recommended section: $section"
+            fi
+          done
+          echo "Constitution validation complete ✓"

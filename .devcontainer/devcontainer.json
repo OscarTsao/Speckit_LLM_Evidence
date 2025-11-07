@@ -1,8 +1,17 @@
 {
-  "name": "Template - Python",
+  "name": "Speckit LLM Evidence - CUDA",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "."
+    "context": ".."
+  },
+  "runArgs": [
+    "--gpus=all",
+    "--ipc=host",
+    "--ulimit=memlock=-1",
+    "--ulimit=stack=67108864"
+  ],
+  "hostRequirements": {
+    "gpu": true
   },
   "customizations": {
     "vscode": {
@@ -10,10 +19,23 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "charliermarsh.ruff",
-        "ms-toolsai.jupyter"
-      ]
+        "ms-toolsai.jupyter",
+        "ms-azuretools.vscode-docker",
+        "github.copilot"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/conda/envs/speckit-llm-evidence/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "python.formatting.provider": "black",
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true
+      }
     }
   },
-  "postCreateCommand": "python -m pip install --upgrade pip && pip install -e '.[dev]'",
-  "remoteUser": "vscode"
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  }
 }

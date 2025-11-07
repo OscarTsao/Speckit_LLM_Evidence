@@ -1,0 +1,113 @@
+# Training Configuration
+
+model:
+  # Base model from HuggingFace
+  name: "google/gemma-2b"  # or "google/gemma-7b" for better performance
+
+  # Architecture modifications
+  adapter_type: "decoder_to_encoder"
+  attention_type: "bidirectional"
+
+  # Task-specific heads
+  num_start_labels: null  # Set dynamically based on max_seq_length
+  num_end_labels: null    # Set dynamically based on max_seq_length
+
+  # Model precision
+  dtype: "float16"  # or "bfloat16"
+
+data:
+  # Dataset configuration
+  dataset_name: "irlab-udc/redsm5"
+  local_path: "data/redsm5"
+
+  # Splits
+  train_split: "train"
+  val_split: "validation"
+  test_split: "test"
+
+  # Preprocessing
+  max_seq_length: 512
+  doc_stride: 128  # for sliding window on long contexts
+  max_query_length: 64
+
+  # Input template
+  template: "Retrieve the evidence from the post:{post} that support the diagnosis of the criterion:{criterion}"
+
+  # Data loading
+  batch_size: 8
+  num_workers: 4
+  pin_memory: true
+  prefetch_factor: 2
+
+training:
+  # Optimization
+  optimizer: "adamw"
+  learning_rate: 2.0e-5
+  weight_decay: 0.01
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1.0e-8
+
+  # Learning rate schedule
+  lr_scheduler: "linear"
+  warmup_ratio: 0.1
+  warmup_steps: null  # Set dynamically if warmup_ratio is null
+
+  # Training dynamics
+  num_epochs: 5
+  max_steps: -1  # -1 means use num_epochs
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+
+  # Mixed precision
+  fp16: true
+  bf16: false  # Use bf16 if your GPU supports it better
+
+  # Optimization for RTX 4090
+  tf32: true  # Enable TF32 for faster matmul
+  cudnn_benchmark: true
+  flash_attention: true
+  gradient_checkpointing: false  # Enable if OOM
+
+  # Evaluation
+  eval_strategy: "steps"
+  eval_steps: 500
+
+  # Checkpointing
+  save_strategy: "steps"
+  save_steps: 500
+  save_total_limit: 3  # Keep only 3 best checkpoints
+  load_best_model_at_end: true
+  metric_for_best_model: "f1"
+  greater_is_better: true
+
+  # Early stopping
+  early_stopping_patience: 3
+  early_stopping_threshold: 0.001
+
+  # Logging
+  logging_steps: 100
+  logging_first_step: true
+  report_to: ["mlflow", "tensorboard"]
+
+  # Reproducibility
+  seed: 42
+
+loss:
+  # Loss configuration
+  start_loss_weight: 1.0
+  end_loss_weight: 1.0
+  ignore_index: -100  # For padding tokens
+
+inference:
+  # Post-processing
+  n_best_size: 20  # Number of n-best predictions to generate
+  max_answer_length: 256
+  null_score_diff_threshold: 0.0  # Threshold for predicting no answer
+
+  # Batch inference
+  batch_size: 32
+
+  # Output format
+  include_probabilities: true
+  include_confidence_scores: true
