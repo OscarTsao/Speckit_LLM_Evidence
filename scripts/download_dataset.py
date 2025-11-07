@@ -3,7 +3,6 @@
 Download and prepare the redsm5 dataset from HuggingFace.
 """
 
-import os
 from pathlib import Path
 from datasets import load_dataset
 import logging
