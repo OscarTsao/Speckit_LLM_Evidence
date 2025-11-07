@@ -301,40 +301,70 @@ bash scripts/setup_environment.sh
 - [ ] Gradio demo interface
 - [ ] Comprehensive documentation
 
-## Implementation Decisions (Resolved)
+## Implementation Decisions (All Resolved)
 
+### Core Architecture
 ✅ **Dataset Format**: REDSM5 provides post and evidence_sentence (not positions)
 ✅ **Base Model**: Gemma-7b default, Gemma-2b alternative (both supported via Makefile)
+✅ **Encoder Conversion**: True bidirectional attention (set `is_causal=False`)
 ✅ **Special Cases**: Filter out "special case" symptom category (keep only 9 DSM-5 symptoms)
 ✅ **Evidence Spans**: Single evidence sentence per example (no multi-span)
+
+### Data Processing
 ✅ **Position Extraction**: Programmatic string matching to locate evidence in post
+✅ **Evidence Matching**: Hybrid approach (exact match → fuzzy fallback at 85% threshold)
 ✅ **Truncation**: Truncate post if exceeds max_seq_length, preserve evidence
-✅ **Encoder Conversion**: True bidirectional attention conversion from decoder
+✅ **Max Sequence Length**: 1024 tokens for optimal context-performance balance
+✅ **No-Answer Handling**: Skip examples where evidence cannot be located
+
+### Model & Training
 ✅ **Prompt Format**: Optimized with special tokens following paper methodology
-✅ **Evaluation**: SQuAD-style metrics at character, token, and word levels
+✅ **Attention Modification**: Mask-only approach, keep pretrained position embeddings
 ✅ **MLflow Backend**: SQLite for development, PostgreSQL for production
 ✅ **Hyperparameter Tuning**: After baseline training with Optuna
 
-## Open Questions
+### Evaluation
+✅ **Evaluation**: SQuAD-style metrics at character, token, and word levels
+✅ **Normalization**: Lowercase, remove punctuation/articles, normalize whitespace
 
-1. **Evidence Matching**: How to handle cases where evidence sentence has slight formatting differences from post?
-   - Use fuzzy matching with threshold?
-   - Normalize both before matching?
+## Resolved Implementation Questions
 
-2. **Maximum Sequence Length**: What's optimal for Gemma-7b on RTX 4090?
-   - 512 tokens (safe, fast)?
-   - 1024 tokens (more context, slower)?
-   - 2048 tokens (maximum context, potential OOM)?
+All open questions have been clarified and decisions documented:
 
-3. **No-Answer Handling**: What to do if evidence sentence not found in post during preprocessing?
-   - Skip example?
-   - Use entire post as evidence?
-   - Flag for manual review?
+### 1. Evidence Matching Strategy ✅
+**Decision**: Hybrid approach (C)
+- First attempt: Exact match with whitespace normalization
+- Fallback: Fuzzy matching with 85% threshold (difflib)
+- Rationale: Balance between precision (exact match) and recall (fuzzy fallback)
+- Implementation: Configured in `data_config.yaml`
 
-4. **Attention Modification**: Best approach for encoder conversion?
-   - Modify attention mask only?
-   - Also modify positional embeddings?
-   - Retrain position embeddings?
+### 2. Maximum Sequence Length ✅
+**Decision**: 1024 tokens
+- Provides good balance between context and performance
+- Fits comfortably on RTX 4090 (24GB VRAM)
+- Allows batch sizes of 4-8 for Gemma-7b
+- Can truncate posts while preserving evidence sentence
+- Implementation: Set in `data_config.yaml` and `model_config.yaml`
+
+### 3. No-Answer Handling ✅
+**Decision**: Skip examples (A)
+- Skip training examples where evidence sentence cannot be located
+- Log all skipped examples to `data/problematic_samples.json`
+- Generate preprocessing report with skip statistics
+- Rationale: Maintains training data quality, avoids noisy supervision
+- Implementation: `not_found_action: "skip"` in `data_config.yaml`
+
+### 4. Encoder Conversion Approach ✅
+**Decision**: Attention mask modification only (A)
+- Set `layer.self_attn.is_causal = False` for all layers
+- Keep pretrained position embeddings (RoPE)
+- No retraining of positional embeddings needed
+- Rationale: Paper shows this is sufficient, preserves pretrained knowledge
+- Implementation: Documented in `docs/ENCODER_CONVERSION_GUIDE.md`
+
+## Remaining Open Questions
+
+None - all implementation decisions have been resolved and documented.
 
 ## Dependencies
 
